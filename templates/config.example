@@ -1,0 +1,27 @@
+# Require a JWT token from your OIDC provider
+---
+apiVersion: security.istio.io/v1beta1
+kind: RequestAuthentication
+metadata:
+  name: istio-ingressgateway
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      app: istio-ingressgateway
+  jwtRules:
+  - issuer: ...
+    jwksUri: ...
+    forwardOriginalToken: true
+
+# Configure secrets used by the oauth2-proxy
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oauth2-proxy
+  namespace: oauth2-proxy
+stringData:
+  OAUTH2_PROXY_CLIENT_ID: ...
+  OAUTH2_PROXY_CLIENT_SECRET: ...
+  OAUTH2_PROXY_COOKIE_SECRET: deadbeef

@@ -1,0 +1,120 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oauth2-proxy
+  labels:
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy
+  namespace: oauth2-proxy
+spec:
+  selector:
+    app: oauth2-proxy
+  ports:
+  - name: http
+    port: 4180
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy
+  namespace: oauth2-proxy
+spec:
+  selector:
+    matchLabels:
+      app: oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: oauth2-proxy
+    spec:
+      containers:
+      - name: oauth2-proxy
+        image: quay.io/oauth2-proxy/oauth2-proxy:v6.1.1
+        args:
+        - --provider=oidc
+        - --oidc-issuer-url=https://dev-283652.okta.com/oauth2/default
+        - --redirect-url=http://lvh.me/oauth2/callback
+        - --cookie-expire=4h
+        - --cookie-name=_oauth2_proxy_istio_ingressgateway
+        - --cookie-refresh=1h
+        - --cookie-samesite=lax
+        - --cookie-secure=false
+        - --email-domain=*
+        - --http-address=http://0.0.0.0:4180
+        - --upstream=static://200
+        - --skip-provider-button=true
+        - --whitelist-domain=lvh.me
+        - --set-authorization-header=true
+        env:
+        - name: OAUTH2_PROXY_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: oauth2-proxy
+              key: OAUTH2_PROXY_CLIENT_ID
+        - name: OAUTH2_PROXY_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth2-proxy
+              key: OAUTH2_PROXY_CLIENT_SECRET
+        - name: OAUTH2_PROXY_COOKIE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: oauth2-proxy
+              key: OAUTH2_PROXY_COOKIE_SECRET
+        resources:
+          requests:
+            cpu: 10m
+            memory: 100Mi
+        ports:
+        - containerPort: 4180
+          protocol: TCP
+        readinessProbe:
+          periodSeconds: 3
+          httpGet:
+            path: /ping
+            port: 4180
+
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: istio-ingressgateway
+  namespace: istio-system
+spec:
+  workloadSelector:
+    labels:
+      app: istio-ingressgateway
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: GATEWAY
+      listener:
+        filterChain:
+          filter:
+            name: envoy.http_connection_manager
+            subFilter:
+              name: envoy.filters.http.jwt_authn
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: envoy.filters.http.ext_authz
+        typed_config:
+          "@type": type.googleapis.com/envoy.config.filter.http.ext_authz.v2.ExtAuthz
+          http_service:
+            server_uri:
+              uri: http://oauth2-proxy.oauth2-proxy.svc.cluster.local:4180
+              cluster: outbound|4180||oauth2-proxy.oauth2-proxy.svc.cluster.local
+              timeout: 10s
+            authorizationRequest:
+              allowedHeaders:
+                patterns:
+                - exact: cookie
+            authorizationResponse:
+              allowedUpstreamHeaders:
+                patterns:
+                - exact: authorization

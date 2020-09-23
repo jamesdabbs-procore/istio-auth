@@ -1,0 +1,105 @@
+# Stand up a simple server to parse, verfiy, and display a JWT
+# See https://github.com/jamesdabbs-procore/jwt-server for details
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: decoder
+  labels:
+    istio-injection: enabled
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: decoder
+  namespace: decoder
+spec:
+  selector:
+    app: decoder
+  ports:
+  - name: http
+    port: 80
+    targetPort: 4567
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: decoder
+  namespace: decoder
+spec:
+  selector:
+    matchLabels:
+      app: decoder
+  template:
+    metadata:
+      labels:
+        app: decoder
+    spec:
+      containers:
+      - name: decoder
+        image: jdabbs/jwt-server:latest
+        ports:
+        - containerPort: 4567
+        imagePullPolicy: Always
+
+# Expose the service
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: decoder
+  namespace: istio-system
+spec:
+  selector:
+    app: istio-ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - decoder/lvh.me
+  # To enable TLS support, generate a credential per https://istio.io/latest/docs/tasks/traffic-management/ingress/secure-ingress/
+  #   tls:
+  #     httpsRedirect: true
+  # - port:
+  #     number: 443
+  #     name: https
+  #     protocol: HTTPS
+  #   hosts:
+  #   - decoder/lvh.me
+  #   tls:
+  #     credentialName: lvh-me-credential
+  #     mode: SIMPLE
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: decoder
+  namespace: decoder
+spec:
+  hosts:
+  - lvh.me
+  gateways:
+  - istio-system/decoder
+  http:
+  - route:
+    - destination:
+        port:
+          number: 80
+        host: decoder
+
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: istio-ingressgateway
+  namespace: istio-system
+spec:
+  selector:
+    matchLabels:
+      app: istio-ingressgateway
+  rules:
+  - from:
+    - source:
+        requestPrincipals: ["*"]
