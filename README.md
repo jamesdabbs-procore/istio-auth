@@ -16,6 +16,6 @@ For simplicity, this example does not set up TLS, but _absolutely should_ in pro
 
 This is a lightly modified version of the setup from [this blog post](https://blog.jetstack.io/blog/istio-oidc/).
 
-## TODO
+![Kiali flow](https://user-images.githubusercontent.com/40446776/94086227-2f28b800-fdbf-11ea-9896-3a3e05119bbc.png)
 
-* Visualization of traffic flow using Kiali
+We're using this sort of setup to protect a [simple Sinatra app](https://github.com/jamesdabbs-procore/jwt-server) which parses and displays the JWT contents.
